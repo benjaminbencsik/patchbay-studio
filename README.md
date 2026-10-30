@@ -5,3 +5,5 @@ A music production app (DAW) that runs entirely in the browser: arrangement and 
 **Open it:** https://benjaminbencsik.github.io/patchbay-studio/
 
 Everything is one file, `index.html`. Projects are saved in your browser; use File ▸ Save to keep a copy as a file.
+
+**Install it as an app:** open the link, then File ▸ Install as an app (or Share ▸ Add to Home Screen on iPhone). The installed app works offline.

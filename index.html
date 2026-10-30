@@ -903,6 +903,8 @@ button,.slot,.clip,.lane,.thead,.knob{touch-action:manipulation}
 .dev[data-look="hypersaw"] .plate b{background:linear-gradient(90deg,#ff3df2,#4df3ff);-webkit-background-clip:text;background-clip:text;color:transparent;letter-spacing:.08em}
 .dev[data-look="grand"] .plate b{font-size:28px;color:#d8b56a;font-style:italic;letter-spacing:.02em}
 .dev[data-look="grain"] .plate b{color:#3cf0c8;letter-spacing:.2em}
+
+.libsec{margin:10px 6px 2px;font:700 10px/1 var(--f-display);letter-spacing:.16em;text-transform:uppercase;color:var(--faint)}
 </style>
 
 <div id="app">
@@ -1085,6 +1087,50 @@ function sawTone(fs,dur,o={}){const os=fs.flatMap(f=>[{f:f*1.004,p:Math.random()
     const e=t<att?t/att:Math.max(sus,1-(1-sus)*(t-att)/dec);return y*e*(t>dur-rel?Math.max(0,(dur-t)/rel):1)}}
 const hz=n=>440*Math.pow(2,(n-69)/12);
 /* ---- v23 sound packs: more synthesized one-shots ---- */
+/* ---- v29 drum pack: more one-shots, then every drum sorted into its own folder ---- */
+const DRUM_CATS=['Kicks','808s','Snares & Rims','Claps & Snaps','Hi-Hats','Open Hats','Cymbals','Toms','Percussion'];
+const isDrumCat=c=>DRUM_CATS.includes(c)||c==='Drums';
+function buildDrumPack(){const D='Drums';
+  const kick=(f1,f0,pk,ad,dr,cl,dur,lpf)=>()=>{let ph=0;const lp=lpf?onepole():null;return gen(dur,t=>{ph+=TAU*(f1+f0*Math.exp(-t*pk))/SR;let y=Math.tanh(dr*Math.sin(ph))*Math.exp(-t*ad)+(t<.004?noise()*cl*(1-t/.004):0);return lp?lp(y,lpf):y})};
+  [['Kick · Sub Boom',38,90,22,3,1.5,.1,1.2],['Kick · Thump',52,150,40,9,2,.3,.4],['Kick · Tight Click',62,320,70,16,2.4,1,.22],['Kick · Distorted',50,200,35,6,7,.4,.6],['Kick · Round',45,110,30,6,1.4,.15,.6],
+   ['Kick · Big Room',48,260,32,4.5,3.5,.5,.9],['Kick · Lo-Fi Dusty',50,140,36,8,2,.2,.45,1400],['Kick · Hardstyle',55,380,26,3.5,9,.6,.8],['Kick · Afro Deep',44,100,25,7,1.6,.2,.5],['Kick · Minimal',56,140,55,14,1.8,.5,.25],
+   ['Kick · Pillow',42,80,30,7,1.1,0,.5,700],['Kick · Rock',58,170,45,10,2.2,.7,.4],['Kick · Jungle',60,220,50,11,2.6,.6,.35],['Kick · Trap Thud',46,170,34,5,3,.35,.75]]
+    .forEach(([nm,...a],i)=>lazy('dk_'+i,nm,D,a[6],kick(...a)));
+  const b808=(n,dec,dr,gl,dur)=>()=>{let ph=0;const f=hz(n);return gen(dur,t=>{ph+=TAU*f*(1+gl*Math.exp(-t*28))/SR;return Math.tanh(dr*Math.sin(ph))*Math.exp(-t*dec)+(t<.003?noise()*.18:0)})};
+  [['808 · Long F#1',30,.8,1.7,.4,3.2],['808 · Punch A0',21,2,2.4,.9,1.8],['808 · Glide D2',38,1.1,1.8,1.4,2.4],['808 · Dirty G1',31,1.3,5,.5,2.2],['808 · Soft B1',35,1.6,1.1,.2,1.8],['808 · Short E1',28,5,2,.3,.9]]
+    .forEach(([nm,n,dec,dr,gl,dur],i)=>lazy('d808_'+i,nm,D,dur,b808(n,dec,dr,gl,dur)));
+  const snare=(tone,nd,bd,hpf,dur,bpf)=>()=>{const hp=biquad('hp',hpf,.8),bp=bpf?biquad('bp',bpf,1.2):null;let ph=0;return gen(dur,t=>{ph+=TAU*tone*(1+.5*Math.exp(-t*40))/SR;const nz=hp(noise());return(bp?bp(nz)*1.4:nz)*Math.exp(-t*nd)*.8+Math.sin(ph)*Math.exp(-t*bd)*.7})};
+  [['Snare · Crack',240,24,32,2200,.25],['Snare · Fat Body',170,9,14,800,.5],['Snare · Brush',200,7,40,3500,.45,6000],['Snare · Piccolo',320,30,40,3000,.2],['Snare · Lo-Fi Thwack',180,16,20,900,.35,1600],
+   ['Snare · Trap Tight',230,28,36,2600,.22],['Snare · Rock Room',190,6,16,1200,.7],['Snare · Clap Layer',210,18,30,1800,.35,1300],['Snare · Electro',260,20,25,1500,.3,4000],['Snare · Dub',160,5,12,700,.8]]
+    .forEach(([nm,...a],i)=>lazy('ds_'+i,nm,D,a[4],snare(...a)));
+  const rim=(f,dec)=>()=>{const bp=biquad('bp',f,5);let ph=0;return gen(.12,t=>{ph+=TAU*f/SR;return(bp(noise())*.6+Math.sin(ph)*.6)*Math.exp(-t*dec)})};
+  [['Rim · Sharp',1900,95],['Rim · Woody',1200,70],['Sidestick',1500,60],['Rim · Click',2600,140]].forEach(([nm,f,d],i)=>lazy('dr_'+i,nm,D,.12,rim(f,d)));
+  const clap=(bpf,spread,tail,dur,n=4)=>()=>{const bp=biquad('bp',bpf,1.2),hp=biquad('hp',500,.7);return gen(dur,t=>{let e=0;for(let k=0;k<n;k++){const o=spread*k*(1+.2*(k%2));if(t>=o)e=Math.max(e,Math.exp(-(t-o)*180))}const k4=spread*n;if(t>k4)e=Math.max(e,.75*Math.exp(-(t-k4)*tail));return hp(bp(noise()))*e})};
+  [['Clap · Tight',1500,.005,20,.25],['Clap · Big Room',1000,.012,4,1.1,5],['Clap · Trap',1300,.008,10,.45],['Clap · Lo-Fi',900,.01,12,.4],['Clap · Stacked',1200,.007,7,.6,6],['Clap · Bright',2200,.006,14,.35]]
+    .forEach(([nm,...a],i)=>lazy('dc_'+i,nm,D,a[3],clap(...a)));
+  [['Snap · Finger',2800,75],['Snap · Wet',2200,40],['Snap · Dry',3400,110]].forEach(([nm,f,d],i)=>lazy('dn_'+i,nm,D,.18,()=>{const bp=biquad('bp',f,3);return gen(.18,t=>bp(noise())*(t<.002?t/.002:Math.exp(-(t-.002)*d)))}));
+  const hat=(hpf,dec,mt,dur)=>()=>{const m=metal(),hp=biquad('hp',hpf,.7);return gen(dur,t=>hp(m()*mt+noise()*(1-mt))*Math.min(1,t/.002)*Math.exp(-t*dec))};
+  [['Hat · Tick',11500,130,.3,.05],['Hat · Crisp',9500,65,.5,.1],['Hat · Dusty',6000,50,.6,.14],['Hat · Metallic',7500,40,.95,.16],['Hat · Trap Roll',10500,110,.35,.06],['Hat · Soft',8000,45,.4,.14],['Hat · Shuffle',9000,55,.5,.12],['Hat · 909 Style',8500,60,.75,.13]]
+    .forEach(([nm,...a],i)=>lazy('dh_'+i,nm,D,a[3],hat(...a)));
+  [['Open Hat · Long',7000,5,.6,.9],['Open Hat · Short',8000,12,.55,.4],['Open Hat · Trashy',6000,7,.4,.7],['Open Hat · Disco',8500,8,.7,.6],['Open Hat · Pedal Splash',7500,16,.5,.35]]
+    .forEach(([nm,...a],i)=>lazy('do_'+i,nm,D,a[3],hat(...a)));
+  const cym=(hpf,dec,mt,dur,bell=0)=>()=>{const m=metal(),hp=biquad('hp',hpf,.6);let ph=0;return gen(dur,t=>{ph+=TAU*3200/SR;return hp(m()*mt+noise()*(1-mt))*Math.exp(-t*dec)*(t<.003?t/.003:1)+(bell?Math.sin(ph)*Math.exp(-t*3)*bell:0)})};
+  [['Crash · Bright',5000,1.8,.5,2.6],['Crash · Dark',3000,2.2,.6,2.4],['Ride · Ping',5500,1.4,.6,2.4,.3],['Ride · Bell',5000,2.2,.7,1.8,.6],['China',3500,2.8,.8,1.8],['Splash · Quick',6000,5,.5,.9],['Crash · Reverse',4500,1.8,.5,2]]
+    .forEach(([nm,...a],i)=>lazy('dy_'+i,nm,D,a[3],nm.includes('Reverse')?()=>reverseBuf(cym(...a.slice(0,4))()):cym(...a)));
+  const tom=(f,bend,dec,dur)=>()=>{let ph=0;return gen(dur,t=>{ph+=TAU*f*(1+bend*Math.exp(-t*12))/SR;return Math.tanh(1.3*Math.sin(ph))*Math.exp(-t*dec)+(t<.003?noise()*.3:0)})};
+  [['Tom · Floor',80,.7,5,.8],['Tom · Low',110,.6,6,.6],['Tom · Mid',150,.55,7,.5],['Tom · High',200,.5,8,.45],['Tom · Electro',130,1.6,6,.6],['Tom · Roto',260,.3,10,.35]]
+    .forEach(([nm,...a],i)=>lazy('dt_'+i,nm,D,a[3],tom(...a)));
+  const perc=(f,dec,bend,dur,nz=0)=>()=>{let ph=0;return gen(dur,t=>{ph+=TAU*f*(1+bend*Math.exp(-t*35))/SR;return(Math.sin(ph)+(nz?noise()*nz:0))*Math.exp(-t*dec)*Math.min(1,t/.0015)})};
+  [['Perc · Blip',900,30,.4,.15],['Perc · Knock',350,25,.6,.2,.15],['Perc · Pop',1600,45,1.2,.1],['Perc · Drop',500,15,2.5,.3],['Perc · Tick',3000,120,.2,.04,.3],['Perc · Wood Hi',1100,45,.2,.1,.05],['Perc · Wood Lo',600,35,.2,.14,.05],['Perc · Laser Zap',2000,20,4,.2]]
+    .forEach(([nm,...a],i)=>lazy('dp_'+i,nm,D,a[3],perc(...a)));
+  [['Shaker · Short',.12,60],['Shaker · Long',.3,18],['Tambourine Hit',.4,10]].forEach(([nm,dur,dec],i)=>lazy('dq_'+i,nm,D,dur,()=>{const hp=biquad('hp',6000,.7),m=nm.includes('Tamb')?metal():null;return gen(dur,t=>hp(noise()*.8+(m?m()*.6:0))*Math.min(1,t/.008)*Math.exp(-t*dec))}));
+  [['Cowbell · High',800,1200],['Cowbell · Low',560,840]].forEach(([nm,f1,f2],i)=>lazy('dw_'+i,nm,D,.45,()=>{let a=0,b=0;const bp=biquad('bp',f1*1.4,1.5);return gen(.45,t=>{a=(a+f1/SR)%1;b=(b+f2/SR)%1;return bp((a<.5?1:-1)+(b<.5?1:-1))*(Math.exp(-t*9)*.8+Math.exp(-t*40)*.6)})}));
+}
+/* sort every drum one-shot into a folder by what it is */
+function categorizeDrums(){for(const s of SAMPLES.values()){if(!(s.cat==='Drums'||s.cat==='Percussion'||/^(p808_|bass808)/.test(s.id)))continue;const n=s.name;
+  s.cat=/^808|808 (Long|Short|Glide|Dist|Punch|Clean|Boom|Bass)|^808 Bass/i.test(n)&&!/kick/i.test(n)?'808s':/kick/i.test(n)?'Kicks':/snare|rim|stick/i.test(n)?'Snares & Rims':/clap|snap/i.test(n)?'Claps & Snaps':
+    /open|sizzle/i.test(n)?'Open Hats':/hat/i.test(n)?'Hi-Hats':/crash|ride|splash|china|cymbal/i.test(n)?'Cymbals':/tom/i.test(n)?'Toms':'Percussion'}}
+
 function buildPacks(){const D='Drums',PC='Percussion',IN='Instruments',VO='Vocal',FX='FX';
   const b808=(n,dec,dr,gl,dur)=>()=>{let ph=0;const f=hz(n);return gen(dur,t=>{ph+=TAU*f*(1+gl*Math.exp(-t*28))/SR;return Math.tanh(dr*Math.sin(ph))*Math.exp(-t*dec)+(t<.003?noise()*.18:0)})};
   [['808 Long C1',24,.9,1.6,.4,3],['808 Long F1',29,.9,1.6,.4,3],['808 Short G1',31,4,1.8,.3,1],['808 Glide A1',33,1.2,1.7,1.2,2.4],['808 Distorted D1',26,1.4,4,.4,2.2],
@@ -2533,7 +2579,7 @@ const RAND_KEEP=new Set(['gain','mix','level','out','sample','source','root','ke
 function randomizeSpec(d,t,spec){spec=spec||t.inst;pushUndo();const out={...(spec.params||{})};
   if(d.id==='drums'){const pool=c=>[...SAMPLES.values()].filter(s=>c.includes(s.cat)).map(s=>s.id),rnd=a=>a[Math.floor(Math.random()*a.length)];
     const role=[/kick/i,/rim|stick|clave|wood/i,/snare|snap/i,/clap|snap/i,/tom|conga|bongo|perc|log/i,/hat|shak/i,/tom|conga|bongo|perc|timbale/i,/open|sizzle|hat/i,/crash|ride|splash|cymbal/i,/cowbell|agogo|tamb|triangle|perc|vox/i];
-    const all=pool(['Drums','Percussion']);PADS.forEach((_,i)=>{const m=all.filter(id=>role[i].test(SAMPLES.get(id).name));out['s'+i]=rnd(m.length?m:all);out['t'+i]=Math.round((Math.random()-.5)*6);out['v'+i]=1;out['l'+i]=Math.random()<.7?1:.4+Math.random()*.5});
+    const all=pool(DRUM_CATS),RF=[['Kicks'],['Snares & Rims'],['Snares & Rims'],['Claps & Snaps'],['Toms','Percussion'],['Hi-Hats'],['Toms','Percussion'],['Open Hats'],['Cymbals'],['Percussion']];PADS.forEach((_,i)=>{let m=pool(RF[i]);if(i===1)m=m.filter(id=>/rim|stick/i.test(SAMPLES.get(id).name));if(i===2)m=m.filter(id=>/snare/i.test(SAMPLES.get(id).name));out['s'+i]=rnd(m.length?m:all);out['t'+i]=Math.round((Math.random()-.5)*6);out['v'+i]=1;out['l'+i]=Math.random()<.7?1:.4+Math.random()*.5});
     out.tune=0;spec.params=out;spec.preset='';commit();toast('Drum Rack: random kit · press ⚄ again for another, ★ to save it');return}
   for(const p of d.params){if(RAND_KEEP.has(p.id))continue;
     if(p.type==='select'){const o=selectOptions(p);if(o.length)out[p.id]=o[Math.floor(Math.random()*o.length)].value;continue}
@@ -3777,7 +3823,7 @@ const WIDGETS={
       b.addEventListener('dragover',e=>{e.preventDefault();b.classList.add('over')});b.addEventListener('dragleave',()=>b.classList.remove('over'));
       b.addEventListener('drop',e=>{e.preventDefault();e.stopPropagation();b.classList.remove('over');const tx=e.dataTransfer.getData('text/plain');if(tx&&tx.startsWith('sample:'))assign(i,tx.slice(7))});return b});
     const grid=h('div',{class:'bigpads','data-padt':t.id},...btns);
-    const cats=['Drums','Percussion','Instruments','Vocal','FX','Imported','Recordings'];
+    const cats=[...DRUM_CATS,'Instruments','Vocal','FX','Imported','Recordings'];
     const refresh=()=>{btns.forEach((b,i)=>{b.classList.toggle('sel',i===sel);b.querySelector('.pl').textContent=nameOf(i)});const i=sel,[n,l]=PADS[i];
       const ss=h('select',{class:'sel','aria-label':l+' pad sample'},...cats.map(c=>{const list=[...SAMPLES.values()].filter(x=>x.cat===c);return list.length?h('optgroup',{label:c},...list.map(x=>h('option',{value:x.id},x.name))):null}).filter(Boolean));
       ss.value=B.val('s'+i);ss.onchange=()=>assign(i,ss.value);
@@ -4222,7 +4268,7 @@ function renderPatterns(body){
 let previewSrc=null;
 function previewSample(id){if(ctx.state!=='running')ctx.resume();if(previewSrc){try{previewSrc.stop()}catch(e){}}const s=SAMPLES.get(id);if(!s)return;const src=ctx.createBufferSource();src.buffer=s.buffer;const g=ctx.createGain();g.gain.value=.8;src.connect(g);g.connect(engine.master);src.start();previewSrc=src}
 function addSampleToArrangement(id){let t=selTrack();pushUndo();if(!t||t.type!=='audio'){t=newTrack('audio',{name:SAMPLES.get(id).name});addTrackObj(t)}const c=audioClip(id,snapB(T.pos,.25));t.clips.push(c);S.sel.track=t.id;S.sel.clip=c.id;commit();toast(`Placed ${c.name} on ${t.name}`)}
-let LIBOPEN=new Set(['Drums']);try{const v=JSON.parse(localStorage.getItem('patchbay.libOpen')||'null');if(Array.isArray(v))LIBOPEN=new Set(v)}catch(e){}
+let LIBOPEN=new Set(['Kicks']);try{const v=JSON.parse(localStorage.getItem('patchbay.libOpen')||'null');if(Array.isArray(v))LIBOPEN=new Set(v.flatMap(x=>x==='Drums'?['Kicks']:[x]))}catch(e){}
 function saveLibOpen(){try{localStorage.setItem('patchbay.libOpen',JSON.stringify([...LIBOPEN]))}catch(e){}}
 function renderLib(){
   $$('.libtabs .tab').forEach(b=>b.classList.toggle('on',b.dataset.lib===S.libTab));const body=$('#libBody');body.replaceChildren();
@@ -4237,7 +4283,8 @@ function renderLib(){
     const toggleAll=open=>{const cats=$$('#libBody .grp[data-cat]').map(g=>g.dataset.cat);LIBOPEN.clear();if(open)cats.forEach(c=>LIBOPEN.add(c));saveLibOpen();filter()};
     q.addEventListener('input',filter);body.append(q,h('div',{class:'libtools'},h('button',{class:'linkbtn',onclick:()=>toggleAll(true)},'Expand all'),h('button',{class:'linkbtn',onclick:()=>toggleAll(false)},'Collapse all')),
       h('p',{class:'libnote libnone',hidden:true},'No sounds match. Try “kick”, “vocal” or “loop”.'));
-    for(const cat of['Drums','Percussion','Instruments','Vocal','Loops','FX','Textures','Imported','Recordings']){const list=[...SAMPLES.values()].filter(s=>s.cat===cat);if(cat==='Recordings'&&!list.length)continue;
+    for(const cat of[...DRUM_CATS,'Instruments','Vocal','Loops','FX','Textures','Imported','Recordings']){const list=[...SAMPLES.values()].filter(s=>s.cat===cat);if(cat==='Recordings'&&!list.length)continue;
+      if(cat==='Kicks')body.append(h('div',{class:'libsec'},'Drums'));if(cat==='Instruments')body.append(h('div',{class:'libsec'},'Sounds'));
       body.append(h('div',{class:'grp','data-cat':cat},h('button',{class:'grpbtn','aria-expanded':'false','data-n':list.length,title:'Show or hide this folder',onclick:()=>{if(q.value){q.value='';LIBOPEN.add(cat)}else LIBOPEN.has(cat)?LIBOPEN.delete(cat):LIBOPEN.add(cat);saveLibOpen();filter()}},
         h('span',{class:'chev','aria-hidden':'true'},'▸'),h('span',{class:'gname'},cat),h('span',{class:'gcount'},String(list.length))),cat==='Imported'?h('button',{class:'ib',title:'Import audio files','aria-label':'Import audio files',onclick:()=>$('#fileAudio').click()},'+'):null));
       if(cat==='Imported'&&!list.length)body.append(h('p',{class:'libnote','data-cat':cat,'data-q':''},'Import WAV, MP3, OGG or FLAC files with +, or drop them anywhere on the page.'));
@@ -4735,7 +4782,7 @@ const CSSV={};
 function readCss(){const cs=getComputedStyle(document.documentElement),g=n=>cs.getPropertyValue(n).trim();Object.assign(CSSV,{bg:g('--bg'),sunk:g('--sunk'),raise:g('--raise'),raise2:g('--raise-2'),line:g('--line'),line2:g('--line-2'),grid:g('--grid'),fg:g('--fg'),dim:g('--dim'),ink:g('--ink'),accent:g('--accent'),cue:g('--cue'),mono:g('--f-mono')})}
 (async function boot(){
   let skin='tape';try{skin=localStorage.getItem('patchbay.skin')||'tape'}catch(e){}if(skin!=='tape')document.documentElement.dataset.skin=skin;
-  readCss();buildLibrary();buildMore();buildPacks();genPresets();injectUserPresets();engine=new Engine(ctx);bind();$('#skin').value=skin;
+  readCss();buildLibrary();buildMore();buildPacks();buildDrumPack();categorizeDrums();genPresets();injectUserPresets();engine=new Engine(ctx);bind();$('#skin').value=skin;
   let restored=false;try{restored=await restoreProjects()}catch(e){console.warn('restore failed',e)}
   if(!restored){demo();ensurePid();engine.setTempo(S.bpm);renderTransport();renderLib();commit()}
   loadWins();if(!WIN.size&&!restored){const k=S.tracks.find(t=>t.name==='Keys');if(k)openWin(k.id)}else renderWins();

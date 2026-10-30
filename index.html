@@ -885,6 +885,18 @@ button,.slot,.clip,.lane,.thead,.knob{touch-action:manipulation}
 .prvellab span{font:600 10px/1 var(--f-display);letter-spacing:.1em;text-transform:uppercase;color:var(--dim)}
 .prvelcv{flex:1;min-width:0;height:100%;display:block;cursor:ns-resize;touch-action:none}
 @media (max-width:760px), (max-height:500px) and (pointer:coarse){.prvel{height:58px}}
+
+/* track volume sliders */
+.volbar{position:relative;flex:1;min-width:0;height:18px;background:var(--sunk);border:1px solid var(--line);border-radius:3px;overflow:hidden;cursor:ew-resize;touch-action:none}
+.volbar i{position:absolute;inset:0;display:block;background:linear-gradient(90deg,color-mix(in srgb,var(--ok) 55%,transparent) 0 70%,color-mix(in srgb,var(--accent) 70%,transparent) 70% 90%,var(--rec) 90%);transform-origin:left;transform:scaleX(0);opacity:.55}
+.volbar .vthumb{position:absolute;top:-1px;bottom:-1px;width:4px;margin-left:-2px;background:var(--fg);border-radius:1px;box-shadow:0 0 0 1px #0008}
+.volbar .vlab.l{right:auto;left:5px}
+.volbar .vlab{position:absolute;right:4px;top:0;bottom:0;display:flex;align-items:center;font:600 9px/1 var(--f-mono);color:var(--fg);text-shadow:0 1px 2px #000;pointer-events:none}
+.volbar:hover,.volbar.drag,.volbar:focus-visible{border-color:var(--line-2)}.volbar.drag .vthumb{background:var(--accent)}
+.volbar.auto .vthumb{background:var(--rec)}
+
+.shead .volbar{height:14px;flex:none;margin-top:3px}
+@media (pointer:coarse){.volbar{height:20px}.volbar .vthumb{width:6px;margin-left:-3px}}
 </style>
 
 <div id="app">
@@ -2379,7 +2391,7 @@ function sceneMenu(sid,x,y){const i=sceneIdx(sid);showMenu(x,y,[{head:'Scene '+(
 function renderSession(){const host=$('#sess');if(!host||host.hidden)return;ensureScenes();const tracks=sessTracks(),sc=S.scenes,st=host.scrollTop,sl=host.scrollLeft;
   const grid=h('div',{class:'sgrid',style:`--ncols:${tracks.length}`});
   for(const t of tracks){const d=t.type==='midi'?PLUGINS[t.inst.type]:null;grid.append(h('div',{class:'shead'+(S.sel.track===t.id?' sel':''),style:`--c:${t.color}`,'data-tid':t.id,title:'Click to select · double-click to open its window · right-click for options',
-    onclick:()=>selectTrack(t.id),ondblclick:()=>openWin(t.id),oncontextmenu:e=>{e.preventDefault();trackMenu(t,e.clientX,e.clientY)}},h('b',{},t.name),h('span',{},t.type==='midi'?(d?d.name:'Instrument'):'Audio'),h('div',{class:'tmeter'},h('i',{'data-meter':t.id}))))}
+    onclick:()=>selectTrack(t.id),ondblclick:()=>openWin(t.id),oncontextmenu:e=>{e.preventDefault();trackMenu(t,e.clientX,e.clientY)}},h('b',{},t.name),h('span',{},t.type==='midi'?(d?d.name:'Instrument'):'Audio'),volBar(t)))}
   grid.append(h('div',{class:'shead master'},h('b',{},'Scenes'),h('span',{},'Launch a whole row')));
   const empty=tracks.every(t=>!Object.keys(t.slots||{}).length);
   sc.forEach(s=>{for(const t of tracks)grid.append(slotEl(t,s.id));
@@ -2866,6 +2878,21 @@ function bindAutoLane(area,svg,t,key,readout){
     const up=()=>{area.removeEventListener('pointermove',mv);area.removeEventListener('pointerup',up);area.removeEventListener('pointercancel',up);touch();if(fresh)renderDock()};
     area.addEventListener('pointermove',mv);area.addEventListener('pointerup',up);area.addEventListener('pointercancel',up)});
 }
+/* ---- volume slider in each track header (doubles as the level meter), fader-style taper: 0 dB sits at 85% ---- */
+const VOL_K=.234,volPos=db=>db<=-60?0:clamp(.85*Math.pow(10,db/20*VOL_K),0,1),posVol=p=>p<=.02?-60:clamp(20*Math.log10(p/.85)/VOL_K,-60,6);
+function volBar(t){const thumb=h('b',{class:'vthumb'}),lab=h('span',{class:'vlab'}),el=h('div',{class:'volbar'+(hasAuto(t,'mix.vol')?' auto':''),'data-vt':t.id,role:'slider',tabindex:0,'aria-label':t.name+' volume','aria-valuemin':-60,'aria-valuemax':6,
+    title:'Volume: drag left or right · double-click for 0 dB · Shift for fine control'},h('i',{'data-meter':t.id}),thumb,lab);
+  const show=()=>{const p=volPos(t.vol);thumb.style.left=(p*100)+'%';lab.textContent=fmtDb(t.vol);lab.classList.toggle('l',p>.5);el.setAttribute('aria-valuenow',t.vol.toFixed(1));el.setAttribute('aria-valuetext',fmtDb(t.vol))};
+  const apply=v=>{t.vol=Math.round(v*10)/10;engine.sync(S.tracks);show();if(S.rec&&T.playing)recordAuto(t,'mix.vol',t.vol);$$(`.strip`).length&&S.tab==='mixer'&&(el._dirty=true)};
+  el.addEventListener('pointerdown',e=>{if(e.button!==0)return;e.preventDefault();e.stopPropagation();el.setPointerCapture(e.pointerId);pushUndo();el.classList.add('drag');const r=el.getBoundingClientRect();let p0=volPos(t.vol),x0=e.clientX;
+    if(!e.target.closest('.vthumb')&&!e.shiftKey){p0=clamp((e.clientX-r.left)/r.width,0,1);apply(posVol(p0))}
+    const mv=ev=>{const p=clamp(p0+(ev.clientX-x0)/r.width*(ev.shiftKey?.2:1),0,1);apply(posVol(p))};
+    const up=()=>{el.removeEventListener('pointermove',mv);el.removeEventListener('pointerup',up);el.removeEventListener('pointercancel',up);el.classList.remove('drag');touch();if(el._dirty&&S.tab==='mixer'){el._dirty=false;renderDock(true)}};
+    el.addEventListener('pointermove',mv);el.addEventListener('pointerup',up);el.addEventListener('pointercancel',up)});
+  el.addEventListener('dblclick',e=>{e.stopPropagation();pushUndo();apply(0);touch();if(S.tab==='mixer')renderDock(true)});
+  el.addEventListener('keydown',e=>{const d={ArrowRight:1,ArrowUp:1,ArrowLeft:-1,ArrowDown:-1}[e.key];if(!d)return;e.preventDefault();e.stopPropagation();pushUndo();apply(clamp(t.vol+d*(e.shiftKey?.1:.5),-60,6));touch()});
+  el.addEventListener('contextmenu',e=>{e.preventDefault();e.stopPropagation();showMenu(e.clientX,e.clientY,[{head:t.name+' volume'},{label:'Reset to 0 dB',fn:()=>{pushUndo();apply(0);touch()}},{label:'−6 dB',fn:()=>{pushUndo();apply(-6);touch()}},{label:'Show volume automation',fn:()=>showAuto(t,'mix.vol')}])});
+  el._show=show;show();return el}
 function rowEl(t,laneW){
   const nameEl=h('div',{class:'tname',title:'Double-click to rename'},t.name);
   nameEl.addEventListener('dblclick',()=>{const inp=h('input',{value:t.name,'aria-label':'Track name'});nameEl.replaceChildren(inp);inp.focus();inp.select();const done=()=>{const v=inp.value.trim();if(v&&v!==t.name){pushUndo();t.name=v}commit()};inp.addEventListener('blur',done);inp.addEventListener('keydown',e=>{if(e.key==='Enter')inp.blur();if(e.key==='Escape'){inp.value=t.name;inp.blur()}})});
@@ -2873,12 +2900,12 @@ function rowEl(t,laneW){
     h('button',{class:'tcolor',title:'Change color','aria-label':'Change track color',onclick:()=>{pushUndo();t.color=COLORS[(COLORS.indexOf(t.color)+1)%COLORS.length];commit()}}),
     h('div',{class:'tmain'},
       h('div',{class:'trow1'},nameEl,openBtn(t),h('button',{class:'ib tdel',title:'Delete track (right-click for more)','aria-label':'Delete track',onclick:()=>deleteTrack(t)},'×')),
-      h('div',{class:'trow2'},h('button',{class:'chip',title:t.type==='midi'?'Open instrument window':'Open effects window',onclick:()=>openWin(t.id)},instLabel(t)),
+      h('div',{class:'trow2'},volBar(t),
         h('button',{class:'tog m'+(t.mute?' on':''),title:'Mute',onclick:()=>{pushUndo();t.mute=!t.mute;commit()}},'M'),
         h('button',{class:'tog s'+(t.solo?' on':''),title:'Solo',onclick:()=>{pushUndo();t.solo=!t.solo;commit()}},'S'),
         t.type==='audio'?h('button',{class:'tog r'+(t.arm?' on':''),title:'Arm for microphone recording (self-hosted copy)',onclick:()=>{const v=!t.arm;S.tracks.forEach(x=>x.arm=false);t.arm=v;renderArr();touch();micCheck();if(v)toast('Armed: turn on Record and press Play to record your microphone')}},'●'):null,
         h('button',{class:'tog a'+(t.autoView?' on':'')+(Object.keys(t.auto||{}).some(k=>hasAuto(t,k))?' has':''),title:'Show automation lane',onclick:()=>{if(t.autoView){t.autoView=null;renderArr();touch()}else showAuto(t)}},'A')),
-      h('div',{class:'tmeter'},h('i',{'data-meter':t.id}))));
+      ));
   head.addEventListener('pointerdown',()=>selectTrack(t.id));
   head.addEventListener('dblclick',e=>{if(e.target.closest('.tname,button,input,.trz'))return;openWin(t.id)});
   const rz=h('div',{class:'trz',title:'Drag to resize the track · Alt+scroll also works'});head.append(rz);
@@ -3949,7 +3976,7 @@ function stripEl(t){
     t.type!=='return'&&returns().length?h('div',{class:'sends',title:'Sends to return tracks'},...sendKnobs(t)):null,
     h('button',{class:'chip',style:'flex:none;width:100%',title:'Open in a window',onclick:()=>openWin(t.id)},instLabel(t)),
     makeKnob(PANP,t.pan,v=>{t.pan=v;engine.sync(S.tracks);touch()},pushUndo,{t,key:'mix.pan'}),
-    h('div',{class:'fz'},h('div',{class:'vm'},h('i',{'data-meter':t.id,'data-axis':'y'})),fader(t.vol,v=>{t.vol=v;dv.textContent=fmtDb(v);engine.sync(S.tracks);touch();if(S.rec&&T.playing)recordAuto(t,'mix.vol',v)},t)),dv,
+    h('div',{class:'fz'},h('div',{class:'vm'},h('i',{'data-meter':t.id,'data-axis':'y'})),fader(t.vol,v=>{t.vol=v;dv.textContent=fmtDb(v);engine.sync(S.tracks);touch();$$(`.volbar[data-vt="${t.id}"]`).forEach(x=>x._show&&x._show());if(S.rec&&T.playing)recordAuto(t,'mix.vol',v)},t)),dv,
     h('div',{class:'ms'},h('button',{class:'tog m'+(t.mute?' on':''),onclick:()=>{pushUndo();t.mute=!t.mute;commit()}},'M'),h('button',{class:'tog s'+(t.solo?' on':''),onclick:()=>{pushUndo();t.solo=!t.solo;commit()}},'S')));
   s.addEventListener('pointerdown',()=>{if(S.sel.track!==t.id){S.sel.track=t.id;$$('.row').forEach(r=>r.classList.toggle('sel',r.dataset.tid===t.id));$$('.strip').forEach(x=>x.classList.remove('sel'));s.classList.add('sel')}});
   return s;

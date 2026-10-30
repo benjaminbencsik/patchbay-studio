@@ -1131,6 +1131,89 @@ function categorizeDrums(){for(const s of SAMPLES.values()){if(!(s.cat==='Drums'
   s.cat=/^808|808 (Long|Short|Glide|Dist|Punch|Clean|Boom|Bass)|^808 Bass/i.test(n)&&!/kick/i.test(n)?'808s':/kick/i.test(n)?'Kicks':/snare|rim|stick/i.test(n)?'Snares & Rims':/clap|snap/i.test(n)?'Claps & Snaps':
     /open|sizzle/i.test(n)?'Open Hats':/hat/i.test(n)?'Hi-Hats':/crash|ride|splash|china|cymbal/i.test(n)?'Cymbals':/tom/i.test(n)?'Toms':'Percussion'}}
 
+/* ---- v30 loop pack: 12 genres, drums + tops + bass + melodic loops at each genre's tempo ---- */
+const LOOP_CATS=['House','Techno','Trap','Drill','Hip-Hop','Lo-Fi','Drum & Bass','Afro','Reggaeton','UK Garage','Pop','Phonk'];
+function buildLoopPack(){
+  /* drum loop from step strings (16 or 32 steps): X loud, x medium, o soft, g ghost */
+  const dp=(bpm,lines,bars=2)=>()=>{const ev=[];for(const[sid,str,g=1,pan=0]of lines){if(!SAMPLES.has(sid))continue;const L=str.length,reps=bars*16/L;for(let r=0;r<reps;r++)for(let i=0;i<L;i++){const ch=str[i];if(ch==='.'||ch==='-')continue;
+      const v=ch==='X'?1:ch==='x'?.75:ch==='o'?.45:ch==='g'?.22:.6;ev.push([sid,(r*L+i)/4,g*v,pan])}}return seqLoop(bpm,bars*4,ev,true)};
+  /* melodic loop: [beat, 'notes', lengthBeats, gain] */
+  const ml=(bpm,list,mk,beats=8,post)=>()=>{const spb=60/bpm,cache=new Map(),ev=list.map(([b,n,len,g=1])=>{const k=n+'|'+len;if(!cache.has(k))cache.set(k,mk(String(n).split(',').map(Number),len*spb));return[cache.get(k),b,g]});const out=seqLoop(bpm,beats,ev,false);return post?post(out):out};
+  const saw=o=>(ps,d)=>gen(d,sawTone(ps.map(hz),d,o));
+  const pl=(ps,d)=>{const ks=ps.map(p=>ksTone(hz(p),.4978,.6));return gen(Math.max(d,.5),()=>ks.reduce((s,k)=>s+k(),0)/Math.sqrt(ps.length))};
+  const ep=(ps,d)=>{const f=ps.map(p=>epTone(hz(p)));return gen(d,t=>f.reduce((s,x)=>s+x(t),0)/Math.sqrt(ps.length))};
+  const pno=(ps,d)=>{const f=ps.map(p=>pianoTone(hz(p)));return gen(Math.max(d,.6),t=>f.reduce((s,x)=>s+x(t),0)/Math.sqrt(ps.length))};
+  const sub=(ps,d)=>{let ph=0;const f=hz(ps[0]);return gen(d,t=>{ph+=TAU*f/SR;return Math.tanh(1.5*Math.sin(ph))*Math.min(1,t/.004)*(t>d-.03?Math.max(0,(d-t)/.03):1)})};
+  const b8=(ps,d)=>{let ph=0;const f=hz(ps[0]);return gen(d,t=>{ph+=TAU*f*(1+.35*Math.exp(-t*30))/SR;return Math.tanh(2*Math.sin(ph))*Math.exp(-t*.9)*(t>d-.04?Math.max(0,(d-t)/.04):1)})};
+  const logd=(ps,d)=>{let ph=0;const f=hz(ps[0]);return gen(Math.max(d,.35),t=>{ph+=TAU*f*(1+.7*Math.exp(-t*28))/SR;return Math.tanh(1.8*Math.sin(ph))*Math.exp(-t*7)})};
+  const organ=(ps,d)=>gen(d,t=>{let s=0;for(const p of ps){const f=hz(p);s+=Math.sin(TAU*f*t)+.5*Math.sin(TAU*2*f*t)+.3*Math.sin(TAU*3*f*t)}return s/ps.length*.6*Math.min(1,t/.01)*(t>d-.03?Math.max(0,(d-t)/.03):1)});
+  const bell=(ps,d)=>gen(Math.max(d,.8),t=>{let s=0;for(const p of ps){const f=hz(p);s+=Math.sin(TAU*f*t+2.5*Math.exp(-t*3)*Math.sin(TAU*f*3.5*t))}return s/ps.length*Math.exp(-t*2.2)*Math.min(1,t/.002)});
+  const cowb=(ps,d)=>{let a=0,b=0;const f=hz(ps[0]),bp=biquad('bp',f*1.5,1.4);return gen(Math.max(d,.3),t=>{a=(a+f/SR)%1;b=(b+f*1.48/SR)%1;return bp((a<.5?1:-1)+(b<.5?1:-1))*Math.exp(-t*7)})};
+  const reese=(ps,d)=>gen(d,sawTone([hz(ps[0]),hz(ps[0])*1.012],d,{cut:520,att:.01,sus:1,rel:.05}));
+  const crush=(bits,ds)=>b=>crushBuf(b,bits,ds);
+  const L=(cat,id,name,bpm,fn)=>{lazy(id,name,cat,8*60/bpm,fn)};
+  /* House 124 · Am */
+  L('House','lh_d','Drums 124',124,dp(124,[['pkick_0','X...X...X...X...'],['pclap_0','....X.......X...',.75],['do_1','..x...x...x...x.',.35,.2],['dh_1','g.o.g.o.g.o.g.o.',.3,-.2]]));
+  L('House','lh_t','Tops & Perc 124',124,dp(124,[['dh_6','xoxoxoxoxoxoxoxo',.3,.3],['dq_0','..o...o...o...oo',.35,-.4],['conga','...x..x....x..x.',.4,.5],['tamb','....x.......x...',.3,-.2]]));
+  L('House','lh_b','Bass 124 Am',124,ml(124,[[.5,'45',.4],[1.5,'45',.4],[2.5,'45',.4],[3.5,'48',.4],[4.5,'41',.4],[5.5,'41',.4],[6.5,'43',.4],[7.5,'43',.4]],saw({cut:500,fenv:3,fdec:.08,sus:.3,dec:.12,rel:.04})));
+  L('House','lh_c','Chord Stabs 124 Am',124,ml(124,[[0,'57,60,64,67',.4],[.75,'57,60,64,67',.3],[2,'57,60,64,67',.4],[4,'53,57,60,64',.4],[4.75,'53,57,60,64',.3],[6,'55,59,62,67',.4],[7,'55,59,62,67',.3]],saw({cut:1400,fenv:4,fdec:.07,sus:.1,dec:.2,rel:.08})));
+  L('House','lh_o','Organ 124 Am',124,ml(124,[[0,'57,60,64',.5],[1,'57,60,64',.5],[1.75,'57,60,64',.4],[3,'57,60,64',.5],[4,'53,57,60',.5],[5,'53,57,60',.5],[5.75,'55,59,62',.4],[7,'55,59,62',.5]],organ));
+  /* Techno 130 · Fm */
+  L('Techno','lt_d','Drums 130',130,dp(130,[['dk_9','X...X...X...X...'],['kicktech','..g...g...g...g.',.5],['dh_7','..x...x...x...x.',.4,.15],['dr_2','....o.......o..o',.4,-.3],['dc_0','....X.......X...',.4]]));
+  L('Techno','lt_t','Hats & Ride 130',130,dp(130,[['dh_0','xoxxxoxxxoxxxoxx',.35,-.2],['dy_2','x.o.x.o.x.o.x.o.',.25,.3],['dp_4','...o..o....o.o..',.35,.5]]));
+  L('Techno','lt_b','Rolling Bass 130 Fm',130,ml(130,Array.from({length:32},(_,i)=>[i/4,i%4===0?'29':'29',.2,i%4===0?0:.8]).filter(x=>x[3]),saw({cut:380,fenv:3,fdec:.05,sus:.2,dec:.08,rel:.03})));
+  L('Techno','lt_s','Acid Stab 130 Fm',130,ml(130,[[0,'53',.3],[.75,'56',.3],[1.5,'53',.25],[2.5,'60',.3],[3.25,'53',.25],[4,'51',.3],[4.75,'53',.3],[6,'56',.3],[7,'53',.4]],saw({cut:700,fenv:8,fdec:.06,sus:.1,dec:.15,rel:.05})));
+  /* Trap 140 · Cm */
+  L('Trap','lr_d','Drums 140',140,dp(140,[['dk_13','X.........X..x..X......X...x....',1],['ds_5','........X...............X.......',.85],['dh_4','x.x.x.x.xxxxx.x.x.x.x.x.x.xxxx.x',.35,.2],['do_1','..............x...............x.',.3]],2));
+  L('Trap','lr_h','Hat Rolls 140',140,dp(140,[['dh_4','x.x.x.xxx.x.x.x.x.x.xxxxx.x.x.x.',.45,.15],['dh_0','..........o.o.o.........o.o.o.o.',.3,-.2]],2));
+  L('Trap','lr_8','808 Line 140 Cm',140,ml(140,[[0,'36',1.5],[2.5,'36',.5],[3,'39',1],[4,'34',1.5],[5.75,'34',.5],[6.5,'31',1.5]],b8));
+  L('Trap','lr_m','Bell Melody 140 Cm',140,ml(140,[[0,'72',.5],[.5,'75',.5],[1,'79',.5],[1.75,'77',.5],[2.5,'75',.5],[3,'72',1],[4,'70',.5],[4.5,'72',.5],[5,'75',.5],[5.75,'74',.5],[6.5,'72',1.5]],bell));
+  /* Drill 142 · Gm */
+  L('Drill','ld_d','Drums 142',142,dp(142,[['dk_6','X.........X.........X.....X.....'],['ds_0','............X..........X.....X..',.85],['dh_2','x..x..x.x..x..x.x..x..x.x..x..x.',.4,.15],['dp_1','...o...........o......o.........',.3,-.3]],2));
+  L('Drill','ld_8','Slide 808 142 Gm',142,ml(142,[[0,'31',1.5],[2.5,'38',.75],[3.25,'34',.75],[4,'31',1.5],[5.5,'29',1],[6.5,'34',1.5]],(ps,d)=>{let ph=0;const f=hz(ps[0]);return gen(d,t=>{ph+=TAU*f*(1+.12*Math.max(0,1-t/.15))/SR;return Math.tanh(2.2*Math.sin(ph))*Math.exp(-t*.8)*(t>d-.04?Math.max(0,(d-t)/.04):1)})}));
+  L('Drill','ld_p','Dark Piano 142 Gm',142,ml(142,[[0,'67,70,74',1],[1.5,'67,70,74',.5],[2,'66,69,74',1],[4,'63,67,70',1],[5.5,'63,67,70',.5],[6,'62,66,69',1.5]],pno));
+  /* Hip-Hop 90 · Dm */
+  L('Hip-Hop','lp_d','Boom Bap Drums 90',90,dp(90,[['dk_4','X......x..X.....X.......x.X.....'],['ds_1','....X.......X.......X.......X..g',.85],['dh_6','x.o.x.o.x.o.x.o.x.o.x.o.x.o.x.oo',.3,.2]],2));
+  L('Hip-Hop','lp_k','Dusty Kit 90',90,()=>crushBuf(dp(90,[['kicklofi','X.....x...X.....X.....x.x.......'],['snarelofi','....X.......X.......X.......X...',.85],['hatpedal','x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.',.3]],2)(),9,2));
+  L('Hip-Hop','lp_b','Bass 90 Dm',90,ml(90,[[0,'38',.75],[1.5,'38',.4],[2,'41',.75],[3.5,'43',.4],[4,'36',.75],[5.5,'36',.4],[6,'40',1]],sub));
+  L('Hip-Hop','lp_p','Piano Chops 90 Dm',90,ml(90,[[0,'62,65,69',.75],[1.5,'62,65,69',.4],[2.5,'60,64,67',.75],[4,'58,62,65',.75],[5.5,'58,62,65',.4],[6.5,'57,61,64',1]],pno,8,crush(11,2)));
+  /* Lo-Fi 82 · Fmaj7 */
+  L('Lo-Fi','lf_d','Lazy Drums 82',82,()=>crushBuf(dp(82,[['dk_6','X.......x.X.....X.........X.....'],['ds_4','....X.......X.......X.......X...',.75],['dh_2','x.oxx.o.x.oxx.o.x.oxx.o.x.oxx.og',.3,.2]],2)(),10,2));
+  L('Lo-Fi','lf_k','Jazzy Keys 82',82,ml(82,[[0,'53,57,60,64',2],[2,'52,55,59,62',2],[4,'50,53,57,60',2],[6,'55,58,62,65',2]],ep,8,crush(10,2)));
+  L('Lo-Fi','lf_g','Guitar Pluck 82',82,ml(82,[[0,'65',.5],[.5,'69',.5],[1,'72',.5],[2,'64',.5],[2.5,'67',.5],[3,'71',.75],[4,'62',.5],[4.5,'65',.5],[5,'69',.5],[6,'67',.5],[6.5,'70',.5],[7,'74',.75]],pl));
+  L('Lo-Fi','lf_b','Soft Bass 82',82,ml(82,[[0,'41',1.5],[2,'40',1.5],[4,'38',1.5],[6,'43',1.5]],sub));
+  /* Drum & Bass 174 · Em */
+  L('Drum & Bass','ln_d','Roller Drums 174',174,dp(174,[['dk_12','X.........X.....X.........X.....'],['ds_0','....X.......X.......X.......X...',.9],['dh_1','x.o.x.o.x.o.x.o.x.o.x.o.x.o.x.o.',.3,.2],['dq_0','..o...o...o...o...o...o...o...o.',.25,-.3]],2));
+  L('Drum & Bass','ln_r','Reese Bass 174 Em',174,ml(174,[[0,'28',3],[3,'31',1],[4,'26',3],[7,'28',1]],reese));
+  L('Drum & Bass','ln_p','Liquid Pad 174 Em',174,ml(174,[[0,'64,67,71,74',4],[4,'60,64,67,71',4]],saw({cut:1600,att:.4,sus:.9,rel:.4})));
+  /* Afro 112 · Am */
+  L('Afro','la_d','Afro House Drums 112',112,dp(112,[['dk_8','X...X...X...X...'],['dr_1','..o..o....o..o..',.5,.3],['dq_0','xoxoxoxoxoxoxoxo',.3,-.3],['dc_3','....X.......X...',.6]]));
+  L('Afro','la_l','Log Drum 112 Am',112,ml(112,[[0,'45',.5],[.75,'45',.5],[1.5,'52',.5],[2.5,'48',.5],[3.25,'45',.5],[4,'43',.5],[4.75,'43',.5],[5.5,'50',.5],[6.5,'48',.5],[7.25,'45',.5]],logd));
+  L('Afro','la_p','Shaker & Conga 112',112,dp(112,[['shakehit','xoxoxoxoxoxoxoxo',.35,.4],['conga','x..x..x...x..x..',.5,.3],['congalo','...x.....x....x.',.5,-.3],['clave','x..x..x...x.x...',.35]]));
+  L('Afro','la_k','Piano Keys 112 Am',112,ml(112,[[0,'57,60,64',.4],[.75,'57,60,64',.4],[2,'57,60,64',.4],[4,'53,57,60',.4],[4.75,'53,57,60',.4],[6,'55,59,62',.4]],pno));
+  /* Reggaeton 95 · Bm */
+  L('Reggaeton','lg_d','Dembow 95',95,dp(95,[['dk_4','X.......X.......'],['ds_7','...X..X....X..X.',.8],['dh_1','x.x.x.x.x.x.x.x.',.3,.2]]));
+  L('Reggaeton','lg_p','Perc 95',95,dp(95,[['timbale','...x..x....x..x.',.45,.3],['shakehit','xoxoxoxoxoxoxoxo',.25,-.3],['dw_0','x.......x.......',.3]]));
+  L('Reggaeton','lg_b','Bass 95 Bm',95,ml(95,[[0,'35',.75],[1.5,'35',.5],[2,'38',.75],[3.5,'40',.5],[4,'31',.75],[5.5,'31',.5],[6,'33',.75],[7.5,'33',.4]],sub));
+  L('Reggaeton','lg_c','Pluck Chords 95 Bm',95,ml(95,[[0,'59,62,66',.4],[.75,'59,62,66',.4],[1.5,'59,62,66',.4],[2.5,'62,66,69',.4],[4,'55,59,62',.4],[4.75,'55,59,62',.4],[5.5,'57,61,64',.4],[6.5,'57,61,64',.4]],pl));
+  /* UK Garage 132 · Cm */
+  L('UK Garage','lu_d','2-Step Drums 132',132,dp(132,[['dk_1','X.........X.....X..........X....'],['ds_8','....X.......X.......X.......X...',.8],['dh_6','..x...x...x..xx...x...x...x..x.x',.35,.2],['dr_3','.......o.........o.....o........',.4,-.3]],2));
+  L('UK Garage','lu_b','Wobble Bass 132 Cm',132,ml(132,[[0,'36',.75],[1,'36',.25],[1.5,'48',.5],[2.5,'39',.75],[4,'32',.75],[5,'32',.25],[5.5,'44',.5],[6.5,'34',.75]],saw({cut:450,fenv:2,fdec:.15,sus:.5,dec:.2,rel:.04})));
+  L('UK Garage','lu_o','Organ Stabs 132 Cm',132,ml(132,[[.5,'60,63,67,70',.3],[1.75,'60,63,67,70',.3],[3,'60,63,67,70',.3],[4.5,'56,60,63,67',.3],[5.75,'56,60,63,67',.3],[7,'58,62,65,69',.3]],organ));
+  /* Pop 118 · C */
+  L('Pop','lo_d','Pop Drums 118',118,dp(118,[['dk_4','X.......X.x.....'],['dc_5','....X.......X...',.8],['dh_5','x.x.x.x.x.x.x.x.',.35,.2],['tamb','....x.......x...',.25,-.3]]));
+  L('Pop','lo_p','Piano Chords 118 C',118,ml(118,[[0,'60,64,67',2],[2,'55,59,62,67',2],[4,'57,60,64',2],[6,'53,57,60,65',2]],pno));
+  L('Pop','lo_b','Bass 118 C',118,ml(118,[[0,'36',.75],[1,'36',.5],[2,'43',.75],[3,'43',.5],[4,'45',.75],[5,'45',.5],[6,'41',.75],[7,'41',.5]],saw({cut:600,fenv:1,fdec:.1,sus:.6,dec:.2,rel:.05})));
+  L('Pop','lo_s','Synth Pluck 118 C',118,ml(118,[[0,'72',.25],[.5,'76',.25],[1,'79',.25],[1.5,'76',.25],[2,'74',.25],[2.5,'79',.25],[3,'83',.25],[3.5,'79',.25],[4,'72',.25],[4.5,'76',.25],[5,'81',.25],[5.5,'76',.25],[6,'77',.25],[6.5,'81',.25],[7,'84',.25],[7.5,'81',.25]],saw({cut:2200,fenv:3,fdec:.06,sus:0,dec:.15,rel:.1})));
+  /* Phonk 130 · F#m */
+  L('Phonk','lk_d','Phonk Drums 130',130,dp(130,[['dk_3','X.....X...X.....X.....X...x.....'],['ds_4','....X.......X.......X.......X...',.8],['dh_0','x.x.x.x.x.x.x.x.x.x.xxx.x.x.x.xx',.35,.2]],2));
+  L('Phonk','lk_c','Cowbell Melody 130 F#m',130,ml(130,[[0,'66',.25],[.5,'66',.25],[.75,'69',.25],[1.25,'66',.25],[1.75,'73',.25],[2.5,'71',.25],[3,'69',.25],[4,'66',.25],[4.5,'66',.25],[4.75,'69',.25],[5.25,'71',.25],[5.75,'73',.25],[6.5,'76',.25],[7,'73',.25]],cowb));
+  L('Phonk','lk_8','Distorted 808 130 F#m',130,ml(130,[[0,'30',1],[1.5,'30',.5],[2.5,'33',1],[4,'28',1],[5.5,'28',.5],[6.5,'30',1.5]],(ps,d)=>{let ph=0;const f=hz(ps[0]);return gen(d,t=>{ph+=TAU*f*(1+.3*Math.exp(-t*30))/SR;return Math.tanh(5*Math.sin(ph))*Math.exp(-t*.9)*.8*(t>d-.04?Math.max(0,(d-t)/.04):1)})}));
+}
+/* put the older loops into genre folders too */
+function categorizeLoops(){const M={loop_house:'House',loop_tops:'House',shaker:'House',loop_arp:'Techno',loop_trap:'Trap',loop_boombap:'Hip-Hop',break:'Hip-Hop',loop_keys:'Lo-Fi',vinyl:'Lo-Fi',loop_dnb:'Drum & Bass',loop_afro:'Afro',loop_bass:'Pop',loop_chords:'Pop'};
+  for(const s of SAMPLES.values()){if(M[s.id])s.cat=M[s.id];else if(s.cat==='Loops')s.cat='Pop'}}
+
 function buildPacks(){const D='Drums',PC='Percussion',IN='Instruments',VO='Vocal',FX='FX';
   const b808=(n,dec,dr,gl,dur)=>()=>{let ph=0;const f=hz(n);return gen(dur,t=>{ph+=TAU*f*(1+gl*Math.exp(-t*28))/SR;return Math.tanh(dr*Math.sin(ph))*Math.exp(-t*dec)+(t<.003?noise()*.18:0)})};
   [['808 Long C1',24,.9,1.6,.4,3],['808 Long F1',29,.9,1.6,.4,3],['808 Short G1',31,4,1.8,.3,1],['808 Glide A1',33,1.2,1.7,1.2,2.4],['808 Distorted D1',26,1.4,4,.4,2.2],
@@ -1268,7 +1351,7 @@ defp({id:'synth',name:'Polysynth',kind:'instrument',desc:'Two detuned oscillator
     return{output:out,noteOn:on,noteOff:off,stopAll,set(id,x){v[id]=x;if(id==='gain')sp(ctx,out.gain,x);if(id==='cutoff'||id==='res'){const now=ctx.currentTime;for(const vc of all){const prm=id==='cutoff'?vc.flt.frequency:vc.flt.Q;hold(prm,now);prm.setTargetAtTime(id==='cutoff'?Math.min(18000,x):x,now,.015)}}},dispose:stopAll};
   }});
 
-const DRUM_SAMPLE_OPTS=()=>[...SAMPLES.values()].filter(s=>!/^Loops$|^Textures$/.test(s.cat)).map(s=>({value:s.id,label:s.name}));
+const DRUM_SAMPLE_OPTS=()=>[...SAMPLES.values()].filter(s=>!/^Loops$|^Textures$/.test(s.cat)&&!(typeof LOOP_CATS!=='undefined'&&LOOP_CATS.includes(s.cat))).map(s=>({value:s.id,label:s.name}));
 defp({id:'drums',name:'Drum Rack',kind:'instrument',desc:'Ten pads on C1 and up. Drop any sample on a pad; each pad has its own tune, volume and length. Closed hat chokes open hat.',pads:PADS,
   params:[P('level','Level',0,1,.8),P('tune','Tune',-12,12,0,{unit:'st',step:1}),P('length','Length',.05,1,1),
     ...PADS.flatMap(([n,l,sid],i)=>[SEL('s'+i,l+' sample',DRUM_SAMPLE_OPTS,sid),P('t'+i,l+' tune',-24,24,0,{unit:'st',step:1}),P('v'+i,l+' volume',0,1,1),P('l'+i,l+' length',0,1,1)])],
@@ -4283,8 +4366,8 @@ function renderLib(){
     const toggleAll=open=>{const cats=$$('#libBody .grp[data-cat]').map(g=>g.dataset.cat);LIBOPEN.clear();if(open)cats.forEach(c=>LIBOPEN.add(c));saveLibOpen();filter()};
     q.addEventListener('input',filter);body.append(q,h('div',{class:'libtools'},h('button',{class:'linkbtn',onclick:()=>toggleAll(true)},'Expand all'),h('button',{class:'linkbtn',onclick:()=>toggleAll(false)},'Collapse all')),
       h('p',{class:'libnote libnone',hidden:true},'No sounds match. Try “kick”, “vocal” or “loop”.'));
-    for(const cat of[...DRUM_CATS,'Instruments','Vocal','Loops','FX','Textures','Imported','Recordings']){const list=[...SAMPLES.values()].filter(s=>s.cat===cat);if(cat==='Recordings'&&!list.length)continue;
-      if(cat==='Kicks')body.append(h('div',{class:'libsec'},'Drums'));if(cat==='Instruments')body.append(h('div',{class:'libsec'},'Sounds'));
+    for(const cat of[...DRUM_CATS,...LOOP_CATS,'Instruments','Vocal','FX','Textures','Imported','Recordings']){const list=[...SAMPLES.values()].filter(s=>s.cat===cat);if(cat==='Recordings'&&!list.length)continue;if(LOOP_CATS.includes(cat)&&!list.length)continue;
+      if(cat==='Kicks')body.append(h('div',{class:'libsec'},'Drums'));if(cat===LOOP_CATS[0])body.append(h('div',{class:'libsec'},'Loops by genre'));if(cat==='Instruments')body.append(h('div',{class:'libsec'},'Sounds'));
       body.append(h('div',{class:'grp','data-cat':cat},h('button',{class:'grpbtn','aria-expanded':'false','data-n':list.length,title:'Show or hide this folder',onclick:()=>{if(q.value){q.value='';LIBOPEN.add(cat)}else LIBOPEN.has(cat)?LIBOPEN.delete(cat):LIBOPEN.add(cat);saveLibOpen();filter()}},
         h('span',{class:'chev','aria-hidden':'true'},'▸'),h('span',{class:'gname'},cat),h('span',{class:'gcount'},String(list.length))),cat==='Imported'?h('button',{class:'ib',title:'Import audio files','aria-label':'Import audio files',onclick:()=>$('#fileAudio').click()},'+'):null));
       if(cat==='Imported'&&!list.length)body.append(h('p',{class:'libnote','data-cat':cat,'data-q':''},'Import WAV, MP3, OGG or FLAC files with +, or drop them anywhere on the page.'));
@@ -4782,7 +4865,7 @@ const CSSV={};
 function readCss(){const cs=getComputedStyle(document.documentElement),g=n=>cs.getPropertyValue(n).trim();Object.assign(CSSV,{bg:g('--bg'),sunk:g('--sunk'),raise:g('--raise'),raise2:g('--raise-2'),line:g('--line'),line2:g('--line-2'),grid:g('--grid'),fg:g('--fg'),dim:g('--dim'),ink:g('--ink'),accent:g('--accent'),cue:g('--cue'),mono:g('--f-mono')})}
 (async function boot(){
   let skin='tape';try{skin=localStorage.getItem('patchbay.skin')||'tape'}catch(e){}if(skin!=='tape')document.documentElement.dataset.skin=skin;
-  readCss();buildLibrary();buildMore();buildPacks();buildDrumPack();categorizeDrums();genPresets();injectUserPresets();engine=new Engine(ctx);bind();$('#skin').value=skin;
+  readCss();buildLibrary();buildMore();buildPacks();buildDrumPack();categorizeDrums();buildLoopPack();categorizeLoops();genPresets();injectUserPresets();engine=new Engine(ctx);bind();$('#skin').value=skin;
   let restored=false;try{restored=await restoreProjects()}catch(e){console.warn('restore failed',e)}
   if(!restored){demo();ensurePid();engine.setTempo(S.bpm);renderTransport();renderLib();commit()}
   loadWins();if(!WIN.size&&!restored){const k=S.tracks.find(t=>t.name==='Keys');if(k)openWin(k.id)}else renderWins();
